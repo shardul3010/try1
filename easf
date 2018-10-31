@@ -1,0 +1,165 @@
+#include<avr/io.h>
+#include<avr/interrupt.h>
+#include<util/delay.h>
+
+unsigned int engine=0;
+unsigned int sound=0;
+unsigned int counter=0;
+
+void engine_init();		
+void sound_init();
+
+void adc_init();
+void adc_read();
+  
+void timer2_init();
+void timer1_init();
+
+int main()
+{
+  DDRB&=~(1<<PB0);		//Engine SW
+  DDRD&=~(1<<PD2);		//Sound sw
+  DDRB|=(1<<PB2);		//CRO,Buzzer_sound
+  DDRB|=(1<<PB3);		//Motor
+  sei();
+  engine_init();
+  sound_init();
+  adc_init();
+  while(1)
+  {    
+       //serial.begin(9600);
+       unsigned int adc_result;
+    	if(engine==1)		
+        {
+          if(sound==1)	//if engine on & then sound on...
+          {
+            serial.begin(9600);
+            adc_result=adc_read();
+            serial.println(adc_result);
+            if((0<adc_result)&&(adc_result>200))  //if volune pot ranges in 0-200
+            {
+              TIMSK2|=(1<<OCIE2A);
+              TIMSK2|=(1<<OCIE2B);
+              OCR2B=180;	//can achieve Bigger speed (duty cycle)....
+            }
+            else
+            {
+              TIMSK2|=(1<<OCIE2A);
+              TIMSK2|=(1<<OCIE2B);
+              OCR2B=30;			//if volume is greater speed would be less..less D.C
+            }
+          }
+        }
+        else
+        {
+          if(sound==1)//when engine off...sound can vary as per pot.
+          {
+            if((0<adc_result)&&(adc_result>200))
+            {
+              TIMSK1|=(1<<OCIE1A);
+              TIMSK1|=(1<<OCIE1B);
+              OCR1B=50;		//	DC
+            }
+            else if((201<adc_result)&&(adc_result>500))
+            {
+              TIMSK1|=(1<<OCIE1A);
+              TIMSK1|=(1<<OCIE1B);
+              OCR1B=110;	// DC
+            }
+            else if((501<adc_result)&&(adc_result>1000))
+            {
+              TIMSK1|=(1<<OCIE1A);
+              TIMSK1|=(1<<OCIE1B);
+              OCR1B=200;
+            }
+          }
+          else
+          {
+            TIMSK1|=(1<<OCIE1A);
+            TIMSK1|=(1<<OCIE1B);
+            OCR1B=0;
+          }
+        }
+    
+  }
+void engine_init()
+{
+   PCICR|=(1<<PCIE0);
+   PCMSK0|=(1<<PCINT0);
+  
+}
+ISR(PCINT0_vect)
+{
+  engine=1;
+  PORTD^=(1<<PD3);
+}
+  
+void sound_init()
+{
+  PCICR|=(PCIE2);
+  PCMSK2|=(1<<PCINT18);
+}
+ISR(PCINT1_vect)
+{
+  sound=1;
+  PORTD^=(1<<PD2);
+}
+  
+void adc_init()
+{
+  ADMUX&=(1<<REFS1);
+  ADMUX|=(1<<REFS0);
+  ADMUX|=((1<<MUX2)|(1<<MUX0));
+  ADMUX&=~(1<<ADLAR);
+  ADCSRA|=(1<<ADEN);
+}
+void adc_read()
+{
+  ADCSRA|=(1<<ADSC);
+  while((adsc==1));
+  adc_result=ADCH;
+  adc_result=adc_result<<8;
+  adc_result=adc_result|ADCL;
+}  
+  
+void timer2_init()
+{
+  TCCR2A&=~(1<<WGM20);
+  TCCR2A|=(1<<WGM21);
+  TCCR2A&=~(1<<WGM22);
+ 
+  TCCR2B|=(1<<CS22);
+  TCCR2B|=(1<<CS20);
+  TCCR2B|=(1<<CS21);
+  OCR2A=255;
+  TCNT2=00;
+}
+ISR(TIMER2_COMPA_vect)
+{
+  PORTD^=(1<<PD3);
+}
+ISR(TIMER2_COMPB_vect)
+{
+  PORTD^=(1<<PD3);
+}
+  
+void timer1_init()
+{
+  TCCR1A&=~(1<<WGM20);
+  TCCR1A|=(1<<WGM21);
+  TCCR1A&=~(1<<WGM22);
+  
+  TCCR1B|=(1<<CS22);
+  TCCR1B|=(1<<CS20);
+  TCCR1B|=(1<<CS21);
+  OCR1A=255;
+  TCNT1=00;
+}
+ISR(TIMER1_COMPA_vect)
+{
+  PORTC^=(1<<PC5);
+}
+ISR(TIMER1_COMPB_vect)
+{
+  PORTC^=(1<<PC5);
+} 
